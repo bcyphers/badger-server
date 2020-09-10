@@ -10,7 +10,8 @@ from sqlalchemy.ext.declarative import declarative_base
 
 # create sqlalchemy engine
 engine = create_engine('mysql://root@localhost/badgersett')
-Base = declarative_base(engine)
+metadata = MetaData(engine)
+Base = declarative_base(engine, metadata=metadata)
 get_session = sessionmaker(bind=engine)
 
 
@@ -33,10 +34,10 @@ class Request(Base):
                  page_origin, action):
         dt = datetime.datetime.fromtimestamp(time/1000)
         self.time = dt.isoformat(sep=' ', timespec='milliseconds')
-        self.req_url = req_url
+        self.req_url = req_url[:2000]
         self.req_host = req_host
         self.req_origin = req_origin
-        self.page_url = page_url
+        self.page_url = page_url[:2000]
         self.page_host = page_host
         self.page_origin = page_origin
         self.action = action
@@ -65,14 +66,14 @@ class Tracker(Base):
                  page_url, page_host, page_origin, type, details):
         dt = datetime.datetime.fromtimestamp(time/1000)
         self.time = dt.isoformat(sep=' ', timespec='milliseconds')
-        self.tracker_url = tracker_url
+        self.tracker_url = tracker_url[:2000]
         self.tracker_host = tracker_host
         self.tracker_origin = tracker_origin
-        self.page_url = page_url
+        self.page_url = page_url[:2000]
         self.page_host = page_host
         self.page_origin = page_origin
         self.type = type
-        self.details = details
+        self.details = json.dumps(details)
 
     def __repr__(self):
         return "<Tracker('%s', '%s', '%s')>" % (
@@ -81,7 +82,6 @@ class Tracker(Base):
 
 # create or connect to tables and map them to ORM classes
 def setup():
-    metadata = MetaData(engine)
     metadata.create_all(engine)
 
 
@@ -128,15 +128,21 @@ class BadgerRequestHandler(BaseHTTPRequestHandler):
         try:
             session.add(row)
             session.commit()
-        except:
+
+            # send an empty 200 response
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+        except Exception as e:
+            print(e)
             session.rollback()
+
+            # send an error response
+            self.send_response(500)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
         finally:
             session.close()
-
-        # send an empty 200 response
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
 
 
 # run the webserver
